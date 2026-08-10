@@ -553,31 +553,89 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
   });
   generateBtn.addEventListener('click', generatePdf);
 
-  function handleFiles(fileListObj) {
+  async function handleFiles(fileListObj) {
     const files = Array.from(fileListObj || []).filter(f => f.type.startsWith('image/'));
     if (!files.length) return;
-    files.forEach((file) => {
+
+    let okCount = 0;
+    let failCount = 0;
+    setStatus('正在处理 ' + files.length + ' 张图片...', '');
+
+    for (const file of files) {
+      try {
+        const normalized = await normalizeImage(file);
+        items.push({
+          id: ++idCounter,
+          file,
+          dataUrl: normalized.dataUrl,
+          width: normalized.width,
+          height: normalized.height,
+          type: normalized.outputType
+        });
+        okCount += 1;
+      } catch (err) {
+        console.error('normalizeImage failed for', file.name, err);
+        failCount += 1;
+      }
+      render();
+    }
+
+    if (failCount) {
+      setStatus('已添加 ' + okCount + ' 张，' + failCount + ' 张无法解析已跳过。', 'error');
+    } else {
+      setStatus('', '');
+    }
+  }
+
+  // 手机拍的照片（尤其是 iPhone）常常带有 EXIF 旋转信息：文件里存的是传感器原始像素，
+  // 靠一个 Orientation 标记告诉看图软件"显示时要转多少度"。<img> 的 naturalWidth/Height
+  // 在不同浏览器里对这个标记的处理不一致，而 canvas/PDF 生成时如果又没转，就会出现
+  // 页面尺寸算对了、但图片内容方向或长宽比对不上的问题（部分 iPhone 照片还是 HEIC 格式，
+  // 同样需要先解码成标准位图）。这里统一用 createImageBitmap 强制按 EXIF 校正方向解码，
+  // 再画到 canvas 上重新导出，得到的就是已经"烧录"好正确方向、不再依赖 EXIF 的干净图片。
+  async function normalizeImage(file) {
+    if (typeof createImageBitmap === 'function') {
+      try {
+        const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(bitmap, 0, 0);
+        if (typeof bitmap.close === 'function') bitmap.close();
+
+        const outputType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+        const dataUrl = outputType === 'image/jpeg'
+          ? canvas.toDataURL(outputType, 0.92)
+          : canvas.toDataURL(outputType);
+
+        return { dataUrl, width: canvas.width, height: canvas.height, outputType };
+      } catch (err) {
+        console.warn('createImageBitmap 解码失败，改用兼容模式：', file.name, err);
+      }
+    }
+    return legacyReadImage(file);
+  }
+
+  // 兼容模式：老浏览器不支持 createImageBitmap 时的兜底方案（不做 EXIF 校正）。
+  function legacyReadImage(file) {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (ev) => {
         const dataUrl = ev.target.result;
         const img = new Image();
         img.onload = () => {
-          items.push({
-            id: ++idCounter,
-            file,
+          resolve({
             dataUrl,
             width: img.naturalWidth,
             height: img.naturalHeight,
-            type: file.type
+            outputType: file.type || 'image/jpeg'
           });
-          render();
         };
-        img.onerror = () => {
-          setStatus('有文件无法解析为图片，已跳过：' + file.name, 'error');
-          render();
-        };
+        img.onerror = () => reject(new Error('无法解析为图片'));
         img.src = dataUrl;
       };
+      reader.onerror = () => reject(new Error('文件读取失败'));
       reader.readAsDataURL(file);
     });
   }
