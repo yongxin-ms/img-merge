@@ -588,6 +588,14 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
     }
   }
 
+  // 移动端浏览器（尤其是 iOS Safari）对单张 canvas 能容纳的像素总数有上限，具体数值
+  // 因机型而异，但现在手机随便一张照片就可能超过 4000 万像素（比如新款 iPhone 主摄
+  // 8064x6048）。一旦超限，Safari 不会报错，而是默默截断画出来的内容——表现出来就是
+  // "图片被裁切了"。这里给最长边设一个安全上限，超过就等比缩小之后再画到 canvas 上，
+  // 保证送进 canvas 的像素量在任何设备上都不会触发这个截断问题。4096px 足够覆盖绝大多数
+  // 屏幕查看和打印场景，非必要不需要保留手机原图那种远超打印/阅读需求的原始分辨率。
+  const MAX_CANVAS_DIMENSION = 4096;
+
   // 手机拍的照片（尤其是 iPhone）常常带有 EXIF 旋转信息：文件里存的是传感器原始像素，
   // 靠一个 Orientation 标记告诉看图软件"显示时要转多少度"。<img> 的 naturalWidth/Height
   // 在不同浏览器里对这个标记的处理不一致，而 canvas/PDF 生成时如果又没转，就会出现
@@ -598,11 +606,25 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
     if (typeof createImageBitmap === 'function') {
       try {
         const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+
+        let targetW = bitmap.width;
+        let targetH = bitmap.height;
+        const longestSide = Math.max(targetW, targetH);
+        if (longestSide > MAX_CANVAS_DIMENSION) {
+          const scale = MAX_CANVAS_DIMENSION / longestSide;
+          targetW = Math.max(1, Math.round(targetW * scale));
+          targetH = Math.max(1, Math.round(targetH * scale));
+        }
+
         const canvas = document.createElement('canvas');
-        canvas.width = bitmap.width;
-        canvas.height = bitmap.height;
+        canvas.width = targetW;
+        canvas.height = targetH;
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(bitmap, 0, 0);
+        ctx.imageSmoothingEnabled = true;
+        if ('imageSmoothingQuality' in ctx) ctx.imageSmoothingQuality = 'high';
+        // 无论是否缩放，drawImage 的目标尺寸都显式指定为整张 canvas，
+        // 保证画出来的是完整的、按比例缩放后的整张图，而不是原始像素的一部分。
+        ctx.drawImage(bitmap, 0, 0, targetW, targetH);
         if (typeof bitmap.close === 'function') bitmap.close();
 
         const outputType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
