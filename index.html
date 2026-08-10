@@ -88,6 +88,10 @@
     font-size: 13px; padding: 6px 8px; border: 1px solid var(--border);
     border-radius: 6px; background: #fff; color: var(--text);
   }
+  #outName {
+    width: 30ch;
+    max-width: 100%;
+  }
   .spacer { flex: 1; }
   button.primary {
     background: var(--accent); color: #fff; border: none; padding: 9px 18px;
@@ -129,7 +133,7 @@
       </select>
     </label>
     <label>文件名
-      <input type="text" id="outName" value="merged" size="14">
+      <input type="text" id="outName" value="merged" size="30">
     </label>
     <div class="spacer"></div>
     <button class="secondary" id="clearBtn">清空</button>
