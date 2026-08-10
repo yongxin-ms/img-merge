@@ -779,33 +779,47 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
       const mode = pageModeEl.value;
       let doc;
 
-      if (mode === 'uniform') {
-        // 统一宽度：以所有图片里最宽的为基准，每张图片按自己的长宽比换算出对应高度，
-        // 页面宽度保持一致，页面高度随图片内容变化。避免不同手机/不同朝向拍出来的照片
-        // 原始像素差异导致每页尺寸参差不齐。
-        //
-        // 但如果这一批里混了长宽比差异很大的图（比如正常照片 + 一张很长很窄的截图），
-        // 按统一宽度换算出来的高度可能会超出 PDF 规范本身对单页尺寸的硬性上限（单边最大
-        // 14400pt）。这里用的 'px' 单位在 jsPDF 里换算成 pt 的比例是 4/3，也就是说页面
-        // 尺寸一旦超过约 10800px 就会碰到这个上限——超限时 jsPDF 会把页面本身悄悄夹到
-        // 14400pt，但塞进去的图片内容还是按我们传入的原始（未夹紧）尺寸摆放，于是图片
-        // 比页面本身还大，超出页面边界的部分在 iOS 这类严格遵循规范的阅读器上就会被直接
-        // 裁掉；桌面上很多工具反而会“容错”正常显示，所以这个问题在电脑上完全看不出来，
-        // 只有手机上能看到裁切。这里在明显更保守的阈值上就主动整体缩小页面（宽高一起按
-        // 比例缩），保证永远不会触达 jsPDF/PDF 规范自己的那道隐藏上限——代价是这种极端
-        // 情况下这一页的宽度会跟其它页略有出入，换来的是所有设备上都能完整显示。
-        const MAX_PAGE_DIMENSION_PX = 8000; // 8000px * 4/3 ≈ 10667pt，留足余量，远低于 14400pt 硬上限
-        const refWidth = Math.max(...items.map((it) => it.width));
-        const pages = items.map((it) => {
-          let w = refWidth;
-          let h = it.height * (refWidth / it.width);
-          if (h > MAX_PAGE_DIMENSION_PX) {
-            const scale = MAX_PAGE_DIMENSION_PX / h;
-            w *= scale;
-            h = MAX_PAGE_DIMENSION_PX;
-          }
-          return { it, w, h };
-        });
+      if (mode === 'uniform' || mode === 'fit') {
+        // PDF 页面用的 'px' 单位在 jsPDF 里换算成 pt 的比例是 4/3。之前直接拿手机照片的
+        // 原始像素（可以到 4096px）当页面尺寸用，换算成实际物理页面能到 70~140 英寸——
+        // 桌面 Chrome、微信内置阅读器这类实现比较宽松，还能凑合显示，但 iOS 上 Safari 和
+        // Chrome 共用苹果自己的 WebKit PDF 渲染引擎，遇到这么大的物理页面会把内容直接
+        // 裁掉一部分，这是实测能稳定复现的差异：同一份文件，Windows 桌面 Chrome、微信内置
+        // 阅读器都完全正常，iOS Safari/Chrome 会裁切。这里把页面目标宽度大幅调低，并且
+        // 始终对一整批页面做统一缩放（而不是每页各自单独夹紧），这样才能保证"统一宽度"
+        // 在任何情况下都是真正统一的，不会因为个别极端长宽比的图（比如很长的截图）又变回
+        // 各页宽度不一致。缩小物理页面尺寸对显示质量几乎没有影响——这些页面本来就是给屏幕
+        // 查看或普通打印用的，不需要保留手机原图那种远超实际需求的物理尺寸。
+        const TARGET_WIDTH_PX = 1600; // 统一宽度模式下的目标基准宽度
+        const MAX_PAGE_LAYOUT_PX = 2400; // 任意一页任意一边的安全上限（宽或高）
+
+        let pages;
+        if (mode === 'uniform') {
+          const nativeMaxWidth = Math.max(...items.map((it) => it.width));
+          const refWidth = Math.min(nativeMaxWidth, TARGET_WIDTH_PX);
+          const rawPages = items.map((it) => ({
+            it,
+            w: refWidth,
+            h: it.height * (refWidth / it.width)
+          }));
+          // 统一按"这一批里最极端的那一页"来决定缩放比例，而不是逐页各自夹紧——
+          // 这样才能保证所有页面的宽度完全一致，不会因为某一张图（比如很长的截图）
+          // 触发夹紧后单独变窄，破坏"统一宽度"这个功能本身的意义。
+          const worstLongestSide = Math.max(...rawPages.map((p) => Math.max(p.w, p.h)));
+          const globalScale = worstLongestSide > MAX_PAGE_LAYOUT_PX
+            ? MAX_PAGE_LAYOUT_PX / worstLongestSide
+            : 1;
+          pages = rawPages.map((p) => ({ it: p.it, w: p.w * globalScale, h: p.h * globalScale }));
+        } else {
+          // fit 模式：每一页本来就是各自独立的（页面尺寸=对应图片自己的尺寸），
+          // 所以这里按每一页自己的情况单独夹紧即可，不应该因为某一张图特别大
+          // 就连带影响其它页面的尺寸。
+          pages = items.map((it) => {
+            const longest = Math.max(it.width, it.height);
+            const scale = longest > MAX_PAGE_LAYOUT_PX ? MAX_PAGE_LAYOUT_PX / longest : 1;
+            return { it, w: it.width * scale, h: it.height * scale };
+          });
+        }
 
         const first = pages[0];
         doc = new jsPDF({
@@ -820,21 +834,6 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
           const { it, w, h } = pages[i];
           doc.addPage([w, h], w >= h ? 'l' : 'p');
           doc.addImage(it.dataUrl, inferFormat(it.type), 0, 0, w, h);
-        }
-      } else if (mode === 'fit') {
-        const first = items[0];
-        doc = new jsPDF({
-          orientation: first.width >= first.height ? 'l' : 'p',
-          unit: 'px',
-          format: [first.width, first.height],
-          compress: true
-        });
-        doc.addImage(first.dataUrl, inferFormat(first.type), 0, 0, first.width, first.height);
-
-        for (let i = 1; i < items.length; i++) {
-          const it = items[i];
-          doc.addPage([it.width, it.height], it.width >= it.height ? 'l' : 'p');
-          doc.addImage(it.dataUrl, inferFormat(it.type), 0, 0, it.width, it.height);
         }
       } else {
         doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
