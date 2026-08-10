@@ -123,6 +123,7 @@
   <div class="controls">
     <label>页面模式
       <select id="pageMode">
+        <option value="uniform" selected>统一宽度，高度按比例缩放（推荐）</option>
         <option value="fit">按图片原始尺寸（每页大小=对应图片大小）</option>
         <option value="a4">统一为 A4，图片居中缩放</option>
       </select>
@@ -756,7 +757,32 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
       const mode = pageModeEl.value;
       let doc;
 
-      if (mode === 'fit') {
+      if (mode === 'uniform') {
+        // 统一宽度：以所有图片里最宽的为基准，每张图片按自己的长宽比换算出对应高度，
+        // 页面宽度保持一致，页面高度随图片内容变化。避免不同手机/不同朝向拍出来的照片
+        // 原始像素差异导致每页尺寸参差不齐。
+        const refWidth = Math.max(...items.map((it) => it.width));
+        const pages = items.map((it) => ({
+          it,
+          w: refWidth,
+          h: it.height * (refWidth / it.width)
+        }));
+
+        const first = pages[0];
+        doc = new jsPDF({
+          orientation: first.w >= first.h ? 'l' : 'p',
+          unit: 'px',
+          format: [first.w, first.h],
+          compress: true
+        });
+        doc.addImage(first.it.dataUrl, inferFormat(first.it.type), 0, 0, first.w, first.h);
+
+        for (let i = 1; i < pages.length; i++) {
+          const { it, w, h } = pages[i];
+          doc.addPage([w, h], w >= h ? 'l' : 'p');
+          doc.addImage(it.dataUrl, inferFormat(it.type), 0, 0, w, h);
+        }
+      } else if (mode === 'fit') {
         const first = items[0];
         doc = new jsPDF({
           orientation: first.width >= first.height ? 'l' : 'p',
