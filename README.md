@@ -10,6 +10,8 @@
 ![no backend](https://img.shields.io/badge/backend-none-brightgreen.svg)
 ![single file](https://img.shields.io/badge/deploy-single%20HTML%20file-informational.svg)
 
+**[🚀 在线体验 / Live Demo](https://yongxin-ms.github.io/img2pdf-web/)**
+
 [功能](#-特性--features) ·
 [快速开始](#-快速开始--quick-start) ·
 [部署](#-部署--deployment) ·
@@ -52,7 +54,7 @@ Drag multiple images into your browser, reorder them, and export a merged PDF �
 No install required — download `index.html` and open it directly in any modern browser.
 
 ```bash
-git clone https://github.com/<your-username>/img2pdf-web.git
+git clone https://github.com/yongxin-ms/img2pdf-web.git
 cd img2pdf-web
 open index.html   # macOS
 # 或者 Windows 下双击 index.html / Windows: double-click index.html
