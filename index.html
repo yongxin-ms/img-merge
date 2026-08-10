@@ -532,6 +532,21 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
   const pageModeEl = document.getElementById('pageMode');
   const outNameEl = document.getElementById('outName');
 
+  // 默认文件名里带上当前时间，方便多次导出时不用手动改名避免互相覆盖。
+  // 页面打开时先填一个"此刻"的时间；如果用户后面一直没改过这个输入框，
+  // 生成 PDF 的时候会用"点击生成那一刻"的时间重新填一次，保证文件名对应
+  // 的是真正下载的时间，而不是老早打开页面时的时间。如果用户自己改过
+  // 文件名，则完全尊重用户输入，不会再被自动覆盖。
+  function pad2(n) {
+    return String(n).padStart(2, '0');
+  }
+  function formatTimestamp(d) {
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
+      '_' + pad2(d.getHours()) + '-' + pad2(d.getMinutes()) + '-' + pad2(d.getSeconds());
+  }
+  let autoDefaultName = 'merged_' + formatTimestamp(new Date());
+  outNameEl.value = autoDefaultName;
+
   dropzone.addEventListener('click', () => fileInput.click());
   dropzone.addEventListener('dragover', (e) => {
     e.preventDefault();
@@ -851,6 +866,12 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
         });
       }
 
+      // 如果用户没动过默认文件名，用"此刻"的时间重新生成一次，
+      // 这样文件名对应的是实际下载的时间，而不是打开页面时的时间。
+      if (outNameEl.value === autoDefaultName) {
+        autoDefaultName = 'merged_' + formatTimestamp(new Date());
+        outNameEl.value = autoDefaultName;
+      }
       const name = (outNameEl.value || 'merged').trim().replace(/\.pdf$/i, '') || 'merged';
       doc.save(name + '.pdf');
       setStatus('已生成 ' + items.length + ' 页 PDF，浏览器应已开始下载。', 'ok');
