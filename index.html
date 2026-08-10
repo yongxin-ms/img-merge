@@ -783,12 +783,29 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
         // 统一宽度：以所有图片里最宽的为基准，每张图片按自己的长宽比换算出对应高度，
         // 页面宽度保持一致，页面高度随图片内容变化。避免不同手机/不同朝向拍出来的照片
         // 原始像素差异导致每页尺寸参差不齐。
+        //
+        // 但如果这一批里混了长宽比差异很大的图（比如正常照片 + 一张很长很窄的截图），
+        // 按统一宽度换算出来的高度可能会超出 PDF 规范本身对单页尺寸的硬性上限（单边最大
+        // 14400pt）。这里用的 'px' 单位在 jsPDF 里换算成 pt 的比例是 4/3，也就是说页面
+        // 尺寸一旦超过约 10800px 就会碰到这个上限——超限时 jsPDF 会把页面本身悄悄夹到
+        // 14400pt，但塞进去的图片内容还是按我们传入的原始（未夹紧）尺寸摆放，于是图片
+        // 比页面本身还大，超出页面边界的部分在 iOS 这类严格遵循规范的阅读器上就会被直接
+        // 裁掉；桌面上很多工具反而会“容错”正常显示，所以这个问题在电脑上完全看不出来，
+        // 只有手机上能看到裁切。这里在明显更保守的阈值上就主动整体缩小页面（宽高一起按
+        // 比例缩），保证永远不会触达 jsPDF/PDF 规范自己的那道隐藏上限——代价是这种极端
+        // 情况下这一页的宽度会跟其它页略有出入，换来的是所有设备上都能完整显示。
+        const MAX_PAGE_DIMENSION_PX = 8000; // 8000px * 4/3 ≈ 10667pt，留足余量，远低于 14400pt 硬上限
         const refWidth = Math.max(...items.map((it) => it.width));
-        const pages = items.map((it) => ({
-          it,
-          w: refWidth,
-          h: it.height * (refWidth / it.width)
-        }));
+        const pages = items.map((it) => {
+          let w = refWidth;
+          let h = it.height * (refWidth / it.width);
+          if (h > MAX_PAGE_DIMENSION_PX) {
+            const scale = MAX_PAGE_DIMENSION_PX / h;
+            w *= scale;
+            h = MAX_PAGE_DIMENSION_PX;
+          }
+          return { it, w, h };
+        });
 
         const first = pages[0];
         doc = new jsPDF({
