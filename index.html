@@ -69,6 +69,19 @@
     font-size: 10px; font-weight: 600;
     padding: 2px 6px; border-radius: 10px; z-index: 2;
   }
+  .card .drag-handle {
+    position: absolute; top: 4px; left: 50%; transform: translateX(-50%);
+    background: rgba(255, 255, 255, .9); color: var(--text-muted);
+    font-size: 15px; line-height: 1; padding: 3px 10px; border-radius: 8px;
+    border: 1px solid var(--border); z-index: 3; cursor: grab;
+    touch-action: none; user-select: none; -webkit-user-select: none;
+  }
+  .card .drag-handle:active { cursor: grabbing; }
+  .drag-ghost {
+    position: fixed; top: 0; left: 0; z-index: 1000;
+    pointer-events: none; opacity: .92;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .25);
+  }
   .header-row {
     display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
   }
@@ -226,6 +239,7 @@ H4sIAAAAAAACA+y923LbSpYo+H6+gkLtYgNmCiJI3QwY1qEpymZt3ZqUt70PxbJTRJJCGQLYQNKSiuLj
       moveUp: '前移',
       moveDown: '后移',
       remove: '移除',
+      dragHandle: '按住拖动排序',
       pdfBadge: (n) => 'PDF·' + n + '页',
       pdfCardName: (name, n) => name + '（共 ' + n + ' 页）',
       statusProcessing: (n) => '正在处理 ' + n + ' 个文件...',
@@ -254,6 +268,7 @@ H4sIAAAAAAACA+y923LbSpYo+H6+gkLtYgNmCiJI3QwY1qEpymZt3ZqUt70PxbJTRJJCGQLYQNKSiuLj
       moveUp: 'Move up',
       moveDown: 'Move down',
       remove: 'Remove',
+      dragHandle: 'Press and drag to reorder',
       pdfBadge: (n) => 'PDF·' + n + 'p',
       pdfCardName: (name, n) => name + ' (' + n + ' pages)',
       statusProcessing: (n) => 'Processing ' + n + ' file(s)...',
@@ -632,6 +647,88 @@ H4sIAAAAAAACA+y923LbSpYo+H6+gkLtYgNmCiJI3QwY1qEpymZt3ZqUt70PxbJTRJJCGQLYQNKSiuLj
     render();
   }
 
+  // ---- 移动端触屏拖拽排序 ----
+  // 卡片原来的拖拽排序用的是 HTML5 原生 drag & drop（dragstart/dragover/drop），
+  // 这套 API 本质是给鼠标设计的，iOS Safari 等大多数移动浏览器的触屏手势并不会触发
+  // 这些事件，所以手机上此前只能靠卡片下方的 ↑ / ↓ 按钮一步步移动，没法直接拖拽。
+  // 这里额外做一套基于 touchstart/touchmove/touchend 的拖拽实现，只绑在卡片上新增的
+  // 小抓手图标（.drag-handle）上，不影响桌面端原有的整卡拖拽；抓手本身设了
+  // touch-action:none，配合 touchmove 里的 preventDefault，拖拽过程中不会被当成
+  // 页面滚动手势。拖拽时会克隆一个跟手的"幽灵"卡片跟随手指，用
+  // document.elementFromPoint 实时判断手指压在哪张卡片上来决定插入位置，抬手时才
+  // 真正把 items 数组重新排序、触发一次 render()。
+  let touchDragState = null;
+
+  function onDragHandleTouchStart(e, index, card) {
+    if (touchDragState || e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    const rect = card.getBoundingClientRect();
+    touchDragState = {
+      sourceIndex: index,
+      targetIndex: index,
+      offsetX: touch.clientX - rect.left,
+      offsetY: touch.clientY - rect.top,
+      width: rect.width,
+      ghost: null,
+      card
+    };
+    card.classList.add('dragging');
+    e.preventDefault();
+  }
+
+  function ensureTouchGhost(state) {
+    if (state.ghost) return state.ghost;
+    const ghost = state.card.cloneNode(true);
+    ghost.classList.remove('dragging');
+    ghost.classList.add('drag-ghost');
+    ghost.style.width = state.width + 'px';
+    document.body.appendChild(ghost);
+    state.ghost = ghost;
+    return ghost;
+  }
+
+  function onDocumentTouchMove(e) {
+    if (!touchDragState || !e.touches.length) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const state = touchDragState;
+    const ghost = ensureTouchGhost(state);
+    const x = touch.clientX - state.offsetX;
+    const y = touch.clientY - state.offsetY;
+    ghost.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+
+    document.querySelectorAll('.card').forEach((c) => c.classList.remove('drag-over'));
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    const targetCard = el ? el.closest('.card') : null;
+    if (targetCard && targetCard !== state.card) {
+      const targetIndex = Number(targetCard.dataset.index);
+      if (!Number.isNaN(targetIndex)) {
+        state.targetIndex = targetIndex;
+        targetCard.classList.add('drag-over');
+      }
+    }
+  }
+
+  function onDocumentTouchEnd() {
+    if (!touchDragState) return;
+    const state = touchDragState;
+    touchDragState = null;
+    if (state.ghost) state.ghost.remove();
+    document.querySelectorAll('.card').forEach((c) => {
+      c.classList.remove('dragging');
+      c.classList.remove('drag-over');
+    });
+    if (state.targetIndex !== state.sourceIndex) {
+      const [moved] = items.splice(state.sourceIndex, 1);
+      items.splice(state.targetIndex, 0, moved);
+    }
+    render();
+  }
+
+  document.addEventListener('touchmove', onDocumentTouchMove, { passive: false });
+  document.addEventListener('touchend', onDocumentTouchEnd);
+  document.addEventListener('touchcancel', onDocumentTouchEnd);
+
   function render() {
     fileListEl.innerHTML = '';
     emptyHint.style.display = items.length ? 'none' : 'block';
@@ -672,6 +769,13 @@ H4sIAAAAAAACA+y923LbSpYo+H6+gkLtYgNmCiJI3QwY1qEpymZt3ZqUt70PxbJTRJJCGQLYQNKSiuLj
       badge.className = 'order-badge';
       badge.textContent = String(index + 1);
       card.appendChild(badge);
+
+      const dragHandle = document.createElement('div');
+      dragHandle.className = 'drag-handle';
+      dragHandle.textContent = '⠿';
+      dragHandle.title = t('dragHandle');
+      dragHandle.addEventListener('touchstart', (e) => onDragHandleTouchStart(e, index, card), { passive: false });
+      card.appendChild(dragHandle);
 
       const thumb = item.kind === 'pdf' ? item.pages[0] : item;
       const displayName = item.kind === 'pdf' ? t('pdfCardName', item.baseName, item.pages.length) : item.name;
