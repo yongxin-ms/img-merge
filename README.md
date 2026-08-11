@@ -32,8 +32,8 @@ Drag multiple images into your browser, reorder them, and export a merged PDF �
 
 ## ✨ 特性 / Features
 
-- 🖼️ **点击或拖拽添加图片**，支持 JPG / PNG / WebP 等常见格式，可一次多选
-  Click or drag-and-drop to add images — JPG, PNG, WebP and more, multi-select supported
+- 🖼️ **点击或拖拽添加图片**，支持 JPG / PNG / WebP / PDF 等常见格式，可一次多选
+  Click or drag-and-drop to add images — JPG, PNG, WebP, PDF and more, multi-select supported
 - 🔀 **两种排序方式**：直接拖拽卡片，或用 ↑ / ↓ 按钮精确移动
   Reorder two ways: drag the cards directly, or use the ↑ / ↓ buttons for precise control
 - 🗑️ **单独移除**任意一张图片，无需重新上传
@@ -127,8 +127,6 @@ Contributions welcome — some ideas worth exploring:
 
 - 图片压缩 / 质量选项，减小生成的 PDF 体积 / Image compression / quality options to shrink output size
 - 支持 PDF 页面之间插入空白页或分隔符 / Support inserting blank/separator pages
-- 多语言界面（目前只有中文 UI）/ i18n for the UI (currently Chinese only)
-- 移动端触屏拖拽排序优化 / Better touch-drag reordering on mobile
 - PWA 离线安装支持 / PWA support for offline installation
 
 ## 🤝 贡献 / Contributing
