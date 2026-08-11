@@ -69,6 +69,14 @@
     font-size: 10px; font-weight: 600;
     padding: 2px 6px; border-radius: 10px; z-index: 2;
   }
+  .header-row {
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+  }
+  .lang-switch {
+    font-size: 13px; padding: 6px 10px; border: 1px solid var(--border);
+    border-radius: 6px; background: #fff; color: var(--text); cursor: pointer;
+    flex-shrink: 0;
+  }
   .card img {
     width: 100%; height: 110px; object-fit: cover;
     border-radius: 6px; display: block; background: #f0f0f2; pointer-events: none;
@@ -119,11 +127,19 @@
 </head>
 <body>
 <div class="container">
-  <h1>图片合并为 PDF</h1>
-  <p class="subtitle">全部在浏览器本地处理，图片不会上传到任何服务器。拖拽卡片或用按钮调整顺序，再导出 PDF。</p>
+  <div class="header-row">
+    <div>
+      <h1 id="appTitle">图片合并为 PDF</h1>
+      <p class="subtitle" id="appSubtitle">全部在浏览器本地处理，图片不会上传到任何服务器。拖拽卡片或用按钮调整顺序，再导出 PDF。</p>
+    </div>
+    <select id="langSwitch" class="lang-switch" title="Language / 语言">
+      <option value="zh">中文</option>
+      <option value="en">English</option>
+    </select>
+  </div>
 
   <div id="dropzone" class="dropzone">
-    <div><strong>点击选择图片或 PDF</strong> 或将文件拖拽到此处（支持多选，JPG / PNG / WebP / PDF 等；每个 PDF 作为一个整体插入，内部页面顺序不变）</div>
+    <div><strong id="dropzoneStrong">点击选择图片或 PDF</strong> <span id="dropzoneRest">或将文件拖拽到此处（支持多选，JPG / PNG / WebP / PDF 等；每个 PDF 作为一个整体插入，内部页面顺序不变）</span></div>
   </div>
   <input type="file" id="fileInput" multiple accept="image/*,application/pdf,.pdf">
 
@@ -131,14 +147,14 @@
   <div id="emptyHint" class="empty-hint">还没有添加图片</div>
 
   <div class="controls">
-    <label>页面模式
+    <label><span id="pageModeLabelText">页面模式</span>
       <select id="pageMode">
         <option value="uniform" selected>统一宽度，高度按比例缩放（推荐）</option>
         <option value="fit">按图片原始尺寸（每页大小=对应图片大小）</option>
         <option value="a4">统一为 A4，图片居中缩放</option>
       </select>
     </label>
-    <label>文件名
+    <label><span id="outNameLabelText">文件名</span>
       <input type="text" id="outName" value="merged" size="30">
     </label>
     <div class="spacer"></div>
@@ -178,6 +194,119 @@ H4sIAAAAAAACA+y923LbSpYo+H6+gkLtYgNmCiJI3QwY1qEpymZt3ZqUt70PxbJTRJJCGQLYQNKSiuLj
   const statusEl = document.getElementById('status');
   const pageModeEl = document.getElementById('pageMode');
   const outNameEl = document.getElementById('outName');
+  const langSwitchEl = document.getElementById('langSwitch');
+  const appTitleEl = document.getElementById('appTitle');
+  const appSubtitleEl = document.getElementById('appSubtitle');
+  const dropzoneStrongEl = document.getElementById('dropzoneStrong');
+  const dropzoneRestEl = document.getElementById('dropzoneRest');
+  const pageModeLabelEl = document.getElementById('pageModeLabelText');
+  const outNameLabelEl = document.getElementById('outNameLabelText');
+
+  // ---- 多语言支持 ----
+  // 界面文案集中放在 I18N 字典里，静态文案（标题、按钮、标签等）在切换语言时统一
+  // 重新赋值一遍；动态文案（状态提示、卡片名称等）用 t(key, ...args) 现取现用。
+  // 语言检测优先级：用户之前手动选过 -> 记在 localStorage 里，下次直接用；否则按
+  // 浏览器界面语言（navigator.language）自动判断一次，之后用户还是可以用右上角的
+  // 下拉框随时手动切换。
+  const I18N = {
+    zh: {
+      docTitle: '图片合并为 PDF',
+      appTitle: '图片合并为 PDF',
+      appSubtitle: '全部在浏览器本地处理，图片不会上传到任何服务器。拖拽卡片或用按钮调整顺序，再导出 PDF。',
+      dropzoneStrong: '点击选择图片或 PDF',
+      dropzoneRest: '或将文件拖拽到此处（支持多选，JPG / PNG / WebP / PDF 等；每个 PDF 作为一个整体插入，内部页面顺序不变）',
+      emptyHint: '还没有添加图片',
+      pageModeLabel: '页面模式',
+      pageModeUniform: '统一宽度，高度按比例缩放（推荐）',
+      pageModeFit: '按图片原始尺寸（每页大小=对应图片大小）',
+      pageModeA4: '统一为 A4，图片居中缩放',
+      outNameLabel: '文件名',
+      clearBtn: '清空',
+      generateBtn: '生成并下载 PDF',
+      moveUp: '前移',
+      moveDown: '后移',
+      remove: '移除',
+      pdfBadge: (n) => 'PDF·' + n + '页',
+      pdfCardName: (name, n) => name + '（共 ' + n + ' 页）',
+      statusProcessing: (n) => '正在处理 ' + n + ' 个文件...',
+      statusAddedWithFail: (ok, fail) => '已添加 ' + ok + ' 个文件，' + fail + ' 个文件无法解析已跳过。',
+      statusGenerating: '正在生成 PDF...',
+      statusGenerated: (n) => '已生成 ' + n + ' 页 PDF，浏览器应已开始下载。',
+      statusGenFailed: (msg) => '生成失败：' + msg,
+      statusNoPages: '没有可生成的页面内容。',
+      decompressionErr: '当前浏览器版本过旧，不支持本工具需要的压缩解压功能（需要 Safari 16.4 / Chrome 80 / Firefox 113 及以上版本），请升级浏览器后重试。',
+      missingEmbedded: (id) => '缺少内嵌资源：' + id
+    },
+    en: {
+      docTitle: 'Merge Images to PDF',
+      appTitle: 'Merge Images to PDF',
+      appSubtitle: 'Everything runs locally in your browser — images are never uploaded anywhere. Drag cards or use the buttons to reorder, then export a PDF.',
+      dropzoneStrong: 'Click to choose images or PDFs',
+      dropzoneRest: 'or drag files here (multi-select supported — JPG / PNG / WebP / PDF, etc. Each PDF is inserted as a whole, with its internal page order preserved.)',
+      emptyHint: 'No images added yet',
+      pageModeLabel: 'Page mode',
+      pageModeUniform: 'Uniform width, height scaled proportionally (recommended)',
+      pageModeFit: 'Native size (each page matches its image)',
+      pageModeA4: 'Uniform A4, image centered and scaled',
+      outNameLabel: 'File name',
+      clearBtn: 'Clear',
+      generateBtn: 'Generate & Download PDF',
+      moveUp: 'Move up',
+      moveDown: 'Move down',
+      remove: 'Remove',
+      pdfBadge: (n) => 'PDF·' + n + 'p',
+      pdfCardName: (name, n) => name + ' (' + n + ' pages)',
+      statusProcessing: (n) => 'Processing ' + n + ' file(s)...',
+      statusAddedWithFail: (ok, fail) => 'Added ' + ok + ' file(s), ' + fail + ' file(s) could not be parsed and were skipped.',
+      statusGenerating: 'Generating PDF...',
+      statusGenerated: (n) => 'Generated a ' + n + '-page PDF — your browser should start downloading it now.',
+      statusGenFailed: (msg) => 'Generation failed: ' + msg,
+      statusNoPages: 'No page content to generate.',
+      decompressionErr: 'Your browser is too old to support the compression feature this tool needs (requires Safari 16.4 / Chrome 80 / Firefox 113 or newer). Please update your browser and try again.',
+      missingEmbedded: (id) => 'Missing embedded resource: ' + id
+    }
+  };
+
+  function detectInitialLang() {
+    try {
+      const saved = localStorage.getItem('img2pdf_lang');
+      if (saved === 'zh' || saved === 'en') return saved;
+    } catch (err) { /* 隐私模式等场景下 localStorage 可能不可用，忽略即可 */ }
+    const nav = (navigator.language || navigator.userLanguage || '').toLowerCase();
+    return nav.startsWith('zh') ? 'zh' : 'en';
+  }
+
+  let currentLang = detectInitialLang();
+
+  function t(key, ...args) {
+    const entry = (I18N[currentLang] || I18N.en)[key];
+    return typeof entry === 'function' ? entry(...args) : entry;
+  }
+
+  function applyStaticTranslations() {
+    document.documentElement.lang = currentLang === 'zh' ? 'zh-CN' : 'en';
+    document.title = t('docTitle');
+    appTitleEl.textContent = t('appTitle');
+    appSubtitleEl.textContent = t('appSubtitle');
+    dropzoneStrongEl.textContent = t('dropzoneStrong');
+    dropzoneRestEl.textContent = t('dropzoneRest');
+    emptyHint.textContent = t('emptyHint');
+    pageModeLabelEl.textContent = t('pageModeLabel');
+    pageModeEl.options[0].textContent = t('pageModeUniform');
+    pageModeEl.options[1].textContent = t('pageModeFit');
+    pageModeEl.options[2].textContent = t('pageModeA4');
+    outNameLabelEl.textContent = t('outNameLabel');
+    clearBtn.textContent = t('clearBtn');
+    generateBtn.textContent = t('generateBtn');
+    langSwitchEl.value = currentLang;
+  }
+
+  langSwitchEl.addEventListener('change', () => {
+    currentLang = langSwitchEl.value;
+    try { localStorage.setItem('img2pdf_lang', currentLang); } catch (err) { /* 忽略：不影响本次切换生效 */ }
+    applyStaticTranslations();
+    render();
+  });
 
   // 默认文件名里带上当前时间，方便多次导出时不用手动改名避免互相覆盖。
   // 页面打开时先填一个"此刻"的时间；如果用户后面一直没改过这个输入框，
@@ -218,7 +347,7 @@ H4sIAAAAAAACA+y923LbSpYo+H6+gkLtYgNmCiJI3QwY1qEpymZt3ZqUt70PxbJTRJJCGQLYQNKSiuLj
 
   function getEmbeddedB64(elId) {
     const el = document.getElementById(elId);
-    if (!el) throw new Error('缺少内嵌资源：' + elId);
+    if (!el) throw new Error(t('missingEmbedded', elId));
     return el.textContent;
   }
 
@@ -234,7 +363,7 @@ H4sIAAAAAAACA+y923LbSpYo+H6+gkLtYgNmCiJI3QwY1qEpymZt3ZqUt70PxbJTRJJCGQLYQNKSiuLj
 
   function requireDecompressionSupport() {
     if (!decompressionSupported()) {
-      throw new Error('当前浏览器版本过旧，不支持本工具需要的压缩解压功能（需要 Safari 16.4 / Chrome 80 / Firefox 113 及以上版本），请升级浏览器后重试。');
+      throw new Error(t('decompressionErr'));
     }
   }
 
@@ -294,7 +423,7 @@ H4sIAAAAAAACA+y923LbSpYo+H6+gkLtYgNmCiJI3QwY1qEpymZt3ZqUt70PxbJTRJJCGQLYQNKSiuLj
 
     let okCount = 0;
     let failCount = 0;
-    setStatus('正在处理 ' + files.length + ' 个文件...', '');
+    setStatus(t('statusProcessing', files.length), '');
 
     for (const file of files) {
       if (isPdfFile(file)) {
@@ -302,11 +431,13 @@ H4sIAAAAAAACA+y923LbSpYo+H6+gkLtYgNmCiJI3QwY1qEpymZt3ZqUt70PxbJTRJJCGQLYQNKSiuLj
           const rawPages = await extractPdfPages(file);
           // 整份 PDF 只生成一张卡片，pages 数组保留页面原始顺序；
           // 排序时移动的是这张卡片整体，不会暴露"给 PDF 里每一页单独排序"的操作。
+          // 卡片上显示的名字（"xxx.pdf（共 N 页）"之类）在 render() 里现算，
+          // 这样切换语言时已经加进来的 PDF 卡片名字也会跟着一起变。
           items.push({
             id: ++idCounter,
             kind: 'pdf',
             file,
-            name: file.name + '（共 ' + rawPages.length + ' 页）',
+            baseName: file.name,
             pages: rawPages.map((p) => ({
               dataUrl: p.dataUrl,
               width: p.width,
@@ -344,7 +475,7 @@ H4sIAAAAAAACA+y923LbSpYo+H6+gkLtYgNmCiJI3QwY1qEpymZt3ZqUt70PxbJTRJJCGQLYQNKSiuLj
     }
 
     if (failCount) {
-      setStatus('已添加 ' + okCount + ' 个文件，' + failCount + ' 个文件无法解析已跳过。', 'error');
+      setStatus(t('statusAddedWithFail', okCount, failCount), 'error');
     } else {
       setStatus('', '');
     }
@@ -543,23 +674,24 @@ H4sIAAAAAAACA+y923LbSpYo+H6+gkLtYgNmCiJI3QwY1qEpymZt3ZqUt70PxbJTRJJCGQLYQNKSiuLj
       card.appendChild(badge);
 
       const thumb = item.kind === 'pdf' ? item.pages[0] : item;
+      const displayName = item.kind === 'pdf' ? t('pdfCardName', item.baseName, item.pages.length) : item.name;
 
       const img = document.createElement('img');
       img.src = thumb.dataUrl;
-      img.alt = item.name;
+      img.alt = displayName;
       card.appendChild(img);
 
       if (item.kind === 'pdf') {
         const pdfBadge = document.createElement('div');
         pdfBadge.className = 'pdf-badge';
-        pdfBadge.textContent = 'PDF·' + item.pages.length + '页';
+        pdfBadge.textContent = t('pdfBadge', item.pages.length);
         card.appendChild(pdfBadge);
       }
 
       const fname = document.createElement('div');
       fname.className = 'fname';
-      fname.title = item.name;
-      fname.textContent = item.name;
+      fname.title = displayName;
+      fname.textContent = displayName;
       card.appendChild(fname);
 
       const actions = document.createElement('div');
@@ -567,19 +699,19 @@ H4sIAAAAAAACA+y923LbSpYo+H6+gkLtYgNmCiJI3QwY1qEpymZt3ZqUt70PxbJTRJJCGQLYQNKSiuLj
 
       const upBtn = document.createElement('button');
       upBtn.textContent = '↑';
-      upBtn.title = '前移';
+      upBtn.title = t('moveUp');
       upBtn.disabled = index === 0;
       upBtn.addEventListener('click', (e) => { e.stopPropagation(); moveItem(index, -1); });
 
       const downBtn = document.createElement('button');
       downBtn.textContent = '↓';
-      downBtn.title = '后移';
+      downBtn.title = t('moveDown');
       downBtn.disabled = index === items.length - 1;
       downBtn.addEventListener('click', (e) => { e.stopPropagation(); moveItem(index, 1); });
 
       const delBtn = document.createElement('button');
       delBtn.textContent = '✕';
-      delBtn.title = '移除';
+      delBtn.title = t('remove');
       delBtn.className = 'remove';
       delBtn.addEventListener('click', (e) => { e.stopPropagation(); removeItem(index); });
 
@@ -623,7 +755,7 @@ H4sIAAAAAAACA+y923LbSpYo+H6+gkLtYgNmCiJI3QwY1qEpymZt3ZqUt70PxbJTRJJCGQLYQNKSiuLj
   async function generatePdf() {
     if (!items.length) return;
     generateBtn.disabled = true;
-    setStatus('正在生成 PDF...', '');
+    setStatus(t('statusGenerating'), '');
 
     try {
       await ensureJsPdfLoaded();
@@ -632,7 +764,7 @@ H4sIAAAAAAACA+y923LbSpYo+H6+gkLtYgNmCiJI3QwY1qEpymZt3ZqUt70PxbJTRJJCGQLYQNKSiuLj
       const mode = pageModeEl.value;
       const flatPages = flattenPages();
       if (!flatPages.length) {
-        setStatus('没有可生成的页面内容。', 'error');
+        setStatus(t('statusNoPages'), 'error');
         return;
       }
       let doc;
@@ -717,15 +849,16 @@ H4sIAAAAAAACA+y923LbSpYo+H6+gkLtYgNmCiJI3QwY1qEpymZt3ZqUt70PxbJTRJJCGQLYQNKSiuLj
       }
       const name = (outNameEl.value || 'merged').trim().replace(/\.pdf$/i, '') || 'merged';
       doc.save(name + '.pdf');
-      setStatus('已生成 ' + flatPages.length + ' 页 PDF，浏览器应已开始下载。', 'ok');
+      setStatus(t('statusGenerated', flatPages.length), 'ok');
     } catch (err) {
       console.error(err);
-      setStatus('生成失败：' + (err && err.message ? err.message : String(err)), 'error');
+      setStatus(t('statusGenFailed', (err && err.message) ? err.message : String(err)), 'error');
     } finally {
       generateBtn.disabled = items.length === 0;
     }
   }
 
+  applyStaticTranslations();
   render();
 })();
 </script>
