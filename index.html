@@ -284,7 +284,7 @@ H4sIAAAAAAACA+y923LbSpYo+H6+gkLtYgNmCiJI3QwY1qEpymZt3ZqUt70PxbJTRJJCGQLYQNKSiuLj
 
   function detectInitialLang() {
     try {
-      const saved = localStorage.getItem('img2pdf_lang');
+      const saved = localStorage.getItem('img-merge_lang');
       if (saved === 'zh' || saved === 'en') return saved;
     } catch (err) { /* 隐私模式等场景下 localStorage 可能不可用，忽略即可 */ }
     const nav = (navigator.language || navigator.userLanguage || '').toLowerCase();
@@ -318,7 +318,7 @@ H4sIAAAAAAACA+y923LbSpYo+H6+gkLtYgNmCiJI3QwY1qEpymZt3ZqUt70PxbJTRJJCGQLYQNKSiuLj
 
   langSwitchEl.addEventListener('change', () => {
     currentLang = langSwitchEl.value;
-    try { localStorage.setItem('img2pdf_lang', currentLang); } catch (err) { /* 忽略：不影响本次切换生效 */ }
+    try { localStorage.setItem('img-merge_lang', currentLang); } catch (err) { /* 忽略：不影响本次切换生效 */ }
     applyStaticTranslations();
     render();
   });

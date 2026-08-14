@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="docs/icon.png" width="120" height="120" alt="img2pdf-web icon" />
+<img src="docs/icon.png" width="120" height="120" alt="img-merge icon" />
 
-# img2pdf-web
+# img-merge
 
 **纯前端、零依赖部署的图片合并 PDF 小工具 / A pure client-side, zero-backend image-to-PDF merger**
 
@@ -10,7 +10,7 @@
 ![no backend](https://img.shields.io/badge/backend-none-brightgreen.svg)
 ![single file](https://img.shields.io/badge/deploy-single%20HTML%20file-informational.svg)
 
-**[🚀 在线体验 / Live Demo](https://yongxin-ms.github.io/img2pdf-web/)**
+**[🚀 在线体验 / Live Demo](https://yongxin-ms.github.io/img-merge/)**
 
 [功能](#-特性--features) ·
 [快速开始](#-快速开始--quick-start) ·
@@ -54,8 +54,8 @@ Drag multiple images into your browser, reorder them, and export a merged PDF �
 No install required — download `index.html` and open it directly in any modern browser.
 
 ```bash
-git clone https://github.com/yongxin-ms/img2pdf-web.git
-cd img2pdf-web
+git clone https://github.com/yongxin-ms/img-merge.git
+cd img-merge
 open index.html   # macOS
 # 或者 Windows 下双击 index.html / Windows: double-click index.html
 ```
@@ -76,9 +76,9 @@ Since `index.html` is fully static, any static hosting method works. Here's an n
 ```nginx
 server {
     listen 80;
-    server_name img2pdf.yourdomain.com;
+    server_name img-merge.yourdomain.com;
 
-    root /var/www/img2pdf-web;
+    root /var/www/img-merge;
     index index.html;
 
     location / {
@@ -91,7 +91,7 @@ server {
 
 ```bash
 docker run -d \
-  --name img2pdf-web \
+  --name img-merge \
   -p 8081:80 \
   -v $(pwd):/usr/share/nginx/html:ro \
   nginx:alpine
@@ -110,7 +110,7 @@ Everything runs client-side in vanilla JavaScript: `FileReader` reads each image
 ## 📁 项目结构 / Project Structure
 
 ```
-img2pdf-web/
+img-merge/
 ├── index.html        # 唯一需要的文件，自包含全部代码和依赖 / the only file you need — fully self-contained
 ├── docs/
 │   ├── icon.png       # 512x512 应用图标 / app icon

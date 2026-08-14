@@ -3,7 +3,7 @@ set -euo pipefail
 
 basepath=$(cd "$(dirname "$0")" && pwd)
 src="$basepath/../index.html"
-dest_dir="/var/www/html/img2pdf-web"
+dest_dir="/var/www/html/img-merge"
 dest_file="$dest_dir/index.html"
 
 if [ ! -f "$src" ]; then
